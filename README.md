@@ -55,4 +55,4 @@ python -m http.server 8765
 
 ## 公開
 
-`main` に push すると GitHub Actions が `tools/build_public.py` を実行し、`dist/` を GitHub Pages に公開します。
+`python tools/deploy_pages.py` で公開用ビルド（personal_only と未同梱の曲を除外）を作り、`gh-pages` ブランチに push します。GitHub Pages はこのブランチから配信されます。
