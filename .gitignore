@@ -1,0 +1,5 @@
+tools/cache/
+tools/__pycache__/
+dist/
+local_audio/*
+!local_audio/README.md

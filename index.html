@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cut">
+<meta name="theme-color" content="#1f2a44">
+<title>あの曲なんだっけ？クイズ</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="topbar">
+  <button class="linkbtn" data-go="home" aria-label="ホームへ">♪ あの曲なんだっけ？</button>
+  <nav>
+    <button class="linkbtn" data-go="stats">成績</button>
+    <button class="linkbtn" data-go="credits">クレジット</button>
+  </nav>
+</header>
+
+<main id="app">
+  <!-- ホーム / 設定 -->
+  <section id="screen-home" class="screen active">
+    <h1>聞いたことはある。<br>でも曲名は？</h1>
+    <p class="lead">運動会・下校チャイム・CM・お風呂の「お湯が沸きました」…<br>誰でも知ってるメロディの曲名を4択で当てよう。</p>
+
+    <form id="settings" class="card" autocomplete="off">
+      <label>出題形式
+        <select id="set-mode" data-enter-next>
+          <option value="title">① 曲名を当てる</option>
+          <option value="composer">② 作曲者を当てる</option>
+          <option value="scene">③ どこで聞く曲か当てる</option>
+        </select>
+      </label>
+      <label>難易度（再生時間）
+        <select id="set-diff" data-enter-next>
+          <option value="10">かんたん（10秒）</option>
+          <option value="5">ふつう（5秒）</option>
+          <option value="3">むずかしい（3秒）</option>
+        </select>
+      </label>
+      <label>問題数
+        <input id="set-count" type="number" min="1" max="100" value="10" inputmode="numeric" data-enter-next>
+      </label>
+      <label>ジャンル
+        <select id="set-genre" data-enter-next>
+          <option value="">すべて</option>
+        </select>
+      </label>
+      <label class="check">
+        <input id="set-personal" type="checkbox" data-enter-next>
+        個人用の曲（local_audio/ に自分で置いた音源）も出題する
+      </label>
+      <div class="btnrow">
+        <button type="submit" id="btn-start" class="primary big">スタート</button>
+        <button type="button" id="btn-review" class="secondary">間違えた曲を復習（<span id="review-count">0</span>曲）</button>
+      </div>
+      <p id="pool-info" class="muted small"></p>
+    </form>
+  </section>
+
+  <!-- クイズ -->
+  <section id="screen-quiz" class="screen">
+    <div class="quizhead">
+      <span id="q-progress">1 / 10</span>
+      <span id="q-score">正解 0</span>
+    </div>
+    <div class="progressbar"><div id="q-bar"></div></div>
+    <h2 id="q-prompt" class="prompt">この曲の曲名は？</h2>
+
+    <div class="player card">
+      <button id="btn-play" class="playbtn" aria-label="再生">
+        <span class="icon">▶</span><span class="label">タップで再生</span>
+      </button>
+      <div class="meter"><div id="play-meter"></div></div>
+      <p id="play-note" class="muted small">再生は画面をタップして開始します（スマホの自動再生制限のため）</p>
+    </div>
+
+    <div id="choices" class="choices"></div>
+
+    <div id="explain" class="card explain hidden"></div>
+    <button id="btn-next" class="primary big hidden">次へ</button>
+  </section>
+
+  <!-- 結果 -->
+  <section id="screen-result" class="screen">
+    <h2>結果</h2>
+    <p id="r-score" class="bigscore"></p>
+    <ul id="r-list" class="resultlist"></ul>
+    <div class="btnrow">
+      <button class="primary" data-go="home">もう一度</button>
+      <button class="secondary" id="btn-review2">間違えた曲を復習</button>
+    </div>
+  </section>
+
+  <!-- 成績 -->
+  <section id="screen-stats" class="screen">
+    <h2>成績</h2>
+    <div id="stats-body"></div>
+    <button id="btn-reset-stats" class="danger small">成績をリセット</button>
+  </section>
+
+  <!-- クレジット -->
+  <section id="screen-credits" class="screen">
+    <h2>クレジット・音源の出典</h2>
+    <p class="muted small">
+      作曲が著作権切れでも録音には別の権利があるため、このアプリはパブリックドメインまたは自由ライセンス（CC0 / CC BY / CC BY-SA）の録音のみを使用しています。
+      各音源は元ファイルから出題部分を切り出し MP3 に変換しています（CC BY-SA の音源は切り出し後のファイルも同じ CC BY-SA で提供されます）。
+    </p>
+    <div id="credits-body"></div>
+    <h3>開始位置の調整（耳での確認用）</h3>
+    <p class="muted small">「みんなが知っている部分」から再生されるかを確認し、ずれていれば ±0.5秒で調整できます。調整値はこの端末に保存され、下のボタンで songs.json 用の値を書き出せます。</p>
+    <div id="tuner-body"></div>
+    <button id="btn-export-tune" class="secondary small">調整値を書き出す</button>
+    <textarea id="tune-out" class="hidden" rows="6" readonly></textarea>
+  </section>
+</main>
+
+<audio id="audio" preload="auto" playsinline></audio>
+<script src="app.js"></script>
+</body>
+</html>

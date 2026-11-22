@@ -1,0 +1,58 @@
+# あの曲なんだっけ？クイズ
+
+運動会の「天国と地獄」、下校チャイムの「家路」、学校のチャイムの「ウェストミンスターの鐘」のように、
+**誰でも聞いたことはあるのに曲名を知らない曲** の一部を聴いて、4択で当てるクイズです。
+
+- 静的Webアプリ（HTML / CSS / JavaScript、ビルド不要）。スマホ・PC両対応
+- 出題形式：①曲名 ②作曲者 ③どこで聞く曲か
+- 難易度：再生時間 10秒 / 5秒 / 3秒
+- ハズレの選択肢は、同じ作曲者・時代・ジャンル・場面の曲を優先して選ぶ
+- 成績と「間違えた曲の復習」リストは localStorage に保存
+- 設定画面はどの項目でも Enter で次の項目へ移動
+- クイズ中のキー操作：Space=再生、1〜4=回答、Enter=次へ
+
+## 起動
+
+`fetch` で songs.json を読むので、ファイルを直接開くのではなく簡易サーバー経由で開いてください。
+
+```
+python -m http.server 8765
+```
+
+→ http://localhost:8765/
+
+## 音源と権利
+
+作曲がパブリックドメインでも **録音には別の権利** があります。このアプリは Wikimedia Commons 上の
+パブリックドメイン / CC0 / CC BY / CC BY-SA の録音だけを使い、出題部分を切り出して `audio/` に置いています。
+曲ごとの出典・演奏者・ライセンスは `songs.json` とアプリ内の「クレジット」画面、一覧は [SONGS.md](SONGS.md)。
+
+- CC BY-SA の録音を切り出したクリップは、同じ CC BY-SA で提供されます。
+- 「乙女の祈り」は自由ライセンスの録音が見つからず、Commons の PD の MIDI（楽譜データ）を `tools/render_midi.py` で合成しています（要ユーザー確認）。
+
+### 個人利用のみの曲（`personal_only`）
+
+作曲の著作権が存続している曲（ファミリーマート入店音「大盛況」、剣の舞、道化師のギャロップ、トランペット吹きの休日）は音源を同梱しません。
+自分で用意した音源を `local_audio/<id>.mp3` に置き、設定で「個人用の曲も出題する」にチェックすると出題されます。
+`local_audio/` は git 管理外で、公開用ビルドにも含まれません。詳細は [local_audio/README.md](local_audio/README.md)。
+
+## 曲の追加・調整
+
+1. `songs.json` に曲を追加（`tags` / `era` / `genre` / `scenes` がハズレ選択肢の選び方に使われます）。
+   `audio.source_file_url` に Commons のファイルURL、`start` に有名な部分の開始秒数を入れる
+2. `python tools/make_clips.py <id>` でクリップを作成（元音源は `tools/cache/` にダウンロード）
+3. 開始位置がずれていたら、アプリの「クレジット」→「開始位置の調整」で ±0.5秒ずつ合わせて「調整値を書き出す」
+   → その JSON を `python tools/apply_tune.py tune.json` に渡すと songs.json とクリップが更新されます
+
+補助ツール：
+
+| ツール | 用途 |
+|---|---|
+| `tools/commons_search.py "語"` | Commons の音声ファイルをライセンス・長さ付きで検索 |
+| `tools/profile.py <file>` | 音量の推移を表示（有名な部分の位置の当たりを付ける） |
+| `tools/melody_trace.py <file> <from> <to>` | 主旋律らしき音名を0.125秒ごとに表示（旋律の照合用。誤検出あり） |
+| `tools/build_public.py` | `dist/` に公開用ビルドを作成（personal_only と未同梱の曲を除外） |
+
+## 公開
+
+`main` に push すると GitHub Actions が `tools/build_public.py` を実行し、`dist/` を GitHub Pages に公開します。
