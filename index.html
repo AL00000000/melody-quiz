@@ -67,9 +67,12 @@
     <h2 id="q-prompt" class="prompt">この曲の曲名は？</h2>
 
     <div class="player card">
-      <button id="btn-play" class="playbtn" aria-label="再生">
-        <span class="icon">▶</span><span class="label">タップで再生</span>
-      </button>
+      <div class="playrow">
+        <button id="btn-play" class="playbtn" aria-label="再生">
+          <span class="icon">▶</span><span class="label">タップで再生</span><kbd>J</kbd>
+        </button>
+        <button id="btn-next" class="nextbtn hidden"><span class="label">次へ ▶▶</span><kbd>K</kbd></button>
+      </div>
       <div class="meter"><div id="play-meter"></div></div>
       <p id="play-note" class="muted small">再生は画面をタップして開始します（スマホの自動再生制限のため）</p>
     </div>
@@ -77,7 +80,6 @@
     <div id="choices" class="choices"></div>
 
     <div id="explain" class="card explain hidden"></div>
-    <button id="btn-next" class="primary big hidden">次へ</button>
   </section>
 
   <!-- 結果 -->

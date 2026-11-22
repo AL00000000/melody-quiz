@@ -8,6 +8,10 @@ const STORE_KEY = "mq_stats_v1";
 const TUNE_KEY = "mq_tune_v1";
 const SETTINGS_KEY = "mq_settings_v1";
 
+// キーボードショートカット：4択は左手ホームポジション、再生と次へは右手の隣り合ったキー
+const CHOICE_KEYS = ["a", "s", "d", "f"];
+const KEY_PLAY = "j", KEY_NEXT = "k";
+
 const MODE_PROMPT = {
   title: "この曲の曲名は？",
   composer: "この曲の作曲者は？",
@@ -237,7 +241,7 @@ function renderQuestion() {
     const b = document.createElement("button");
     b.className = "choice";
     b.dataset.opt = opt;
-    b.innerHTML = `<span class="muted">${i + 1}.</span> ${esc(opt)}`;
+    b.innerHTML = `<kbd>${CHOICE_KEYS[i].toUpperCase()}</kbd>${esc(opt)}`;
     b.addEventListener("click", () => answer(opt, b));
     box.appendChild(b);
   });
@@ -255,11 +259,13 @@ function answer(opt, btn) {
     if (b.dataset.opt === q.answer) b.classList.add("correct");
   });
   if (!ok) btn.classList.add("wrong");
+  stopAudio();      // 曲を止めて効果音をはっきり聞かせる（「もう一度聴く」で再生できる）
+  playEffect(ok);
   game.log.push({ id: q.song.id, ok, picked: opt });
   recordResult(q.song.id, ok);
   $("#q-score").textContent = `正解 ${game.score}`;
   renderExplain(q.song, ok);
-  $("#btn-next").textContent = game.idx + 1 < game.questions.length ? "次へ" : "結果を見る";
+  $("#btn-next .label").textContent = game.idx + 1 < game.questions.length ? "次へ ▶▶" : "結果を見る";
   $("#btn-next").classList.remove("hidden");
 }
 
@@ -379,6 +385,47 @@ function noteFreq(n) {
   const semi = NOTE_IDX[m[1]] + (m[2] === "#" ? 1 : m[2] === "b" ? -1 : 0) + (Number(m[3]) + 1) * 12;
   return 440 * Math.pow(2, (semi - 69) / 12);
 }
+// 正解「ピンポーン」／不正解「ブー」。Web Audio で合成（音源ファイル不要・権利問題なし）
+function playEffect(ok) {
+  try {
+    synthCtx = synthCtx || new (window.AudioContext || window.webkitAudioContext)();
+    synthCtx.resume();
+    const ctx = synthCtx, t0 = ctx.currentTime + 0.02;
+    const out = ctx.createGain();
+    out.gain.value = 0.5;
+    out.connect(ctx.destination);
+    if (ok) {
+      // 高い音→低い音のチャイム（E6 → C#6）
+      [[1318.5, 0], [1108.7, 0.22]].forEach(([f, dt]) => {
+        const t = t0 + dt;
+        [[1, 0.5], [2, 0.12], [3, 0.05]].forEach(([h, a]) => {
+          const o = ctx.createOscillator(), g = ctx.createGain();
+          o.type = "sine"; o.frequency.value = f * h;
+          g.gain.setValueAtTime(0.0001, t);
+          g.gain.exponentialRampToValueAtTime(a, t + 0.008);
+          g.gain.exponentialRampToValueAtTime(0.0001, t + (dt ? 1.1 : 0.5));
+          o.connect(g).connect(out); o.start(t); o.stop(t + 1.2);
+        });
+      });
+    } else {
+      // 低いブザー音（わずかにずらした2本の矩形波でうなりを出す）
+      const lp = ctx.createBiquadFilter();
+      lp.type = "lowpass"; lp.frequency.value = 1200;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.exponentialRampToValueAtTime(0.35, t0 + 0.015);
+      g.gain.setValueAtTime(0.35, t0 + 0.5);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.6);
+      lp.connect(g).connect(out);
+      [140, 146].forEach(f => {
+        const o = ctx.createOscillator();
+        o.type = "square"; o.frequency.value = f;
+        o.connect(lp); o.start(t0); o.stop(t0 + 0.65);
+      });
+    }
+  } catch (e) { console.warn("効果音を再生できませんでした", e); }
+}
+
 function playSynth(song, dur, onTick, onEnd) {
   const syn = song.audio;
   synthCtx = synthCtx || new (window.AudioContext || window.webkitAudioContext)();
@@ -527,10 +574,14 @@ $("#btn-review").addEventListener("click", () => startGame(true));
 $("#btn-review2").addEventListener("click", () => startGame(true));
 $("#btn-next").addEventListener("click", nextQuestion);
 document.addEventListener("keydown", e => {
-  if (!$("#screen-quiz").classList.contains("active") || e.target.matches("input,select,textarea")) return;
-  if (e.key === " ") { e.preventDefault(); $("#btn-play").click(); }
-  else if (/^[1-4]$/.test(e.key)) { const b = $$(".choice")[Number(e.key) - 1]; b && !b.disabled && b.click(); }
-  else if (e.key === "Enter" && !$("#btn-next").classList.contains("hidden")) { e.preventDefault(); nextQuestion(); }
+  if (!$("#screen-quiz").classList.contains("active") || e.target.matches?.("input,select,textarea")) return;
+  if (e.ctrlKey || e.metaKey || e.altKey || e.isComposing) return;
+  const k = e.key.toLowerCase();
+  const ci = CHOICE_KEYS.indexOf(k) >= 0 ? CHOICE_KEYS.indexOf(k) : (/^[1-4]$/.test(k) ? Number(k) - 1 : -1);
+  const nextVisible = !$("#btn-next").classList.contains("hidden");
+  if (k === KEY_PLAY || k === " ") { e.preventDefault(); $("#btn-play").click(); }
+  else if (ci >= 0) { const b = $$(".choice")[ci]; b && !b.disabled && b.click(); }
+  else if ((k === KEY_NEXT || k === "enter") && nextVisible) { e.preventDefault(); nextQuestion(); }
 });
 
 init();

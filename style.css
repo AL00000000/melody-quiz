@@ -42,12 +42,15 @@ button:disabled{opacity:.45;cursor:not-allowed}
 #q-bar{height:100%;width:0;background:var(--accent);transition:width .3s}
 .prompt{font-size:1.25rem}
 .player{display:flex;flex-direction:column;align-items:center;gap:10px}
-.playbtn{width:min(100%,320px);display:flex;align-items:center;justify-content:center;gap:12px;
+.playrow{display:flex;gap:10px;width:min(100%,520px);justify-content:center}
+.playbtn{flex:1 1 0;min-width:0;display:flex;align-items:center;justify-content:center;gap:12px;
   padding:18px;border-radius:999px;border:0;background:var(--accent);color:var(--accent-fg);
   font-size:1.2rem;font-weight:800;cursor:pointer;touch-action:manipulation}
 .playbtn .icon{font-size:1.4rem}
 .playbtn.playing{filter:saturate(.6)}
-.meter{width:min(100%,320px);height:8px;background:var(--line);border-radius:4px;overflow:hidden}
+.nextbtn{flex:1 1 0;min-width:0;padding:18px;border-radius:999px;border:0;background:var(--ok);color:#fff;
+  font-size:1.2rem;font-weight:800;cursor:pointer;touch-action:manipulation;white-space:nowrap}
+.meter{width:min(100%,520px);height:8px;background:var(--line);border-radius:4px;overflow:hidden}
 #play-meter{height:100%;width:0;background:var(--ok)}
 .choices{display:grid;grid-template-columns:1fr;gap:10px;margin:14px 0}
 @media (min-width:560px){.choices{grid-template-columns:1fr 1fr}}
@@ -81,3 +84,13 @@ th,td{text-align:left;padding:6px 4px;border-bottom:1px solid var(--line);vertic
 .tuner .val{min-width:5.5em;text-align:right;font-variant-numeric:tabular-nums}
 .badge{font-size:.75rem;padding:1px 6px;border-radius:6px;background:#f2c94c;color:#3a2c00;margin-left:4px}
 textarea{width:100%;margin-top:8px;font-family:ui-monospace,monospace;font-size:.8rem}
+kbd{display:inline-block;min-width:1.6em;padding:0 .35em;border-radius:6px;font:700 .8rem/1.5 ui-monospace,Consolas,monospace;
+  text-align:center;background:rgba(255,255,255,.22);color:inherit;border:1px solid rgba(255,255,255,.35);margin-left:6px}
+.choice kbd{background:var(--bg);border-color:var(--line);color:var(--muted);margin:0 8px 0 0}
+.playbtn .label,.nextbtn .label{white-space:nowrap}
+@media (max-width:480px){
+  .playrow{gap:8px}
+  .playbtn,.nextbtn{padding:14px 8px;font-size:.95rem;gap:4px}
+  .playbtn .icon{display:none}
+  .playrow kbd{margin-left:4px}
+}
