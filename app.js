@@ -10,7 +10,8 @@ const SETTINGS_KEY = "mq_settings_v1";
 
 // キーボードショートカット：4択は左手ホームポジション、再生と次へは右手の隣り合ったキー
 const CHOICE_KEYS = ["a", "s", "d", "f"];
-const KEY_PLAY = "j", KEY_NEXT = "k";
+const KEY_PLAY = "j", KEY_NEXT = "k", KEY_EXCLUDE = "l";
+const EXCL_KEY = "mq_excluded_v1";
 
 const MODE_PROMPT = {
   title: "この曲の曲名は？",
@@ -115,29 +116,49 @@ function readSettings() {
     personal: $("#set-personal").checked,
   };
 }
+// 「聞いたことがない曲」を出題から外すリスト（端末ごとに保存）
+const getExcluded = () => new Set(loadJSON(EXCL_KEY, []));
+function setExcluded(id, on) {
+  const ex = getExcluded();
+  on ? ex.add(id) : ex.delete(id);
+  saveJSON(EXCL_KEY, [...ex]);
+}
 function poolFor(st) {
+  const ex = getExcluded();
   return DB.songs.filter(s =>
-    available.has(s.id) &&
+    available.has(s.id) && !ex.has(s.id) &&
     (st.personal || !s.personal_only) &&
     (!st.genre || s.genre === st.genre) &&
     (st.mode !== "scene" || (s.scenes && s.scenes.length)));
 }
 function wrongIds() {
   const per = getStats().perSong;
-  return Object.keys(per).filter(id => per[id].last === false && available.has(id));
+  const ex = getExcluded();
+  return Object.keys(per).filter(id => per[id].last === false && available.has(id) && !ex.has(id));
+}
+function renderExcludedList() {
+  const ids = [...getExcluded()].filter(id => songById(id));
+  $("#excluded-count").textContent = ids.length;
+  $("#excluded-box").classList.toggle("hidden", ids.length === 0);
+  $("#excluded-list").innerHTML = ids.map(id => {
+    const s = songById(id);
+    return `<li><span>${esc(s.title)} <span class="muted small">／${esc(s.composer_short)}</span></span>
+      <button type="button" class="secondary small" data-restore="${esc(id)}">戻す</button></li>`;
+  }).join("");
 }
 function refreshHome() {
   const st = readSettings();
   const pool = poolFor(st);
   const personalCount = DB.songs.filter(s => s.personal_only && available.has(s.id)).length;
   $("#pool-info").textContent =
-    `出題できる曲：${pool.length}曲（全${DB.songs.filter(s => !s.personal_only).length}曲＋個人用 ${personalCount}曲を検出）` +
+    `出題できる曲：${pool.length}曲（全${DB.songs.filter(s => !s.personal_only).length}曲＋個人用 ${personalCount}曲を検出${getExcluded().size ? `、除外中 ${getExcluded().size}曲` : ""}）` +
     (pool.length < st.count ? `／問題数は${pool.length}問になります` : "");
   $("#btn-start").disabled = pool.length < 1;
   const w = wrongIds().length;
   $("#review-count").textContent = w;
   $("#btn-review").disabled = w === 0;
   $("#btn-review2").disabled = w === 0;
+  renderExcludedList();
 }
 
 // Enter で次の入力項目へ。最後の項目ならスタートボタンへ
@@ -281,9 +302,25 @@ function renderExplain(s, ok) {
       <dt>どこで聞く</dt><dd>${(s.scenes || []).map(x => `<span class="tag">${esc(x)}</span>`).join("") || "—"}</dd>
     </dl>
     ${s.trivia ? `<p>${esc(s.trivia)}</p>` : ""}
-    <p class="muted small">音源：${esc(a.performer || "")}（${esc(a.license || "")}）</p>`;
+    <p class="muted small">音源：${esc(a.performer || "")}（${esc(a.license || "")}）</p>
+    <button type="button" id="btn-exclude" class="secondary small"></button>`;
+  updateExcludeButton(s.id);
   $("#explain").classList.remove("hidden");
 }
+function updateExcludeButton(id) {
+  const b = $("#btn-exclude");
+  if (!b) return;
+  const on = getExcluded().has(id);
+  b.innerHTML = (on ? "除外を取り消す" : "聞いたことがない曲なので出題から外す") + `<kbd>${KEY_EXCLUDE.toUpperCase()}</kbd>`;
+  b.classList.toggle("excluded", on);
+}
+function toggleExclude() {
+  const q = game?.questions[game.idx];
+  if (!q || !q.done) return;
+  setExcluded(q.song.id, !getExcluded().has(q.song.id));
+  updateExcludeButton(q.song.id);
+}
+document.addEventListener("click", e => { if (e.target.closest("#btn-exclude")) toggleExclude(); });
 
 function nextQuestion() {
   stopAudio();
@@ -582,6 +619,11 @@ document.addEventListener("keydown", e => {
   if (k === KEY_PLAY || k === " ") { e.preventDefault(); $("#btn-play").click(); }
   else if (ci >= 0) { const b = $$(".choice")[ci]; b && !b.disabled && b.click(); }
   else if ((k === KEY_NEXT || k === "enter") && nextVisible) { e.preventDefault(); nextQuestion(); }
+  else if (k === KEY_EXCLUDE && nextVisible) { e.preventDefault(); toggleExclude(); }
+});
+$("#excluded-list").addEventListener("click", e => {
+  const id = e.target.closest("[data-restore]")?.dataset.restore;
+  if (id) { setExcluded(id, false); refreshHome(); }
 });
 
 init();
