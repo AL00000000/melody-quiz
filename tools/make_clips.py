@@ -1,7 +1,7 @@
 """songs.json の各曲について、元音源をダウンロードして出題用クリップ(audio/<id>.mp3)を作る。
 
 - 元ファイルは tools/cache/ に保存（git管理外）
-- クリップ範囲: start の 5 秒前 〜 start + duration + 10 秒（アプリ内の開始位置チューナーで±調整できるよう余白を持たせる）
+- クリップ範囲: start の 5 秒前 〜 start + 最長再生20秒 + 10 秒（アプリ内の開始位置チューナーで±調整できるよう余白を持たせる）
 - songs.json の audio.clip_start / audio.clip_length を書き戻す
 使い方:
   python tools/make_clips.py            # 足りないクリップだけ作る
@@ -16,6 +16,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CACHE = os.path.join(ROOT, "tools", "cache")
 UA = {"User-Agent": "melody-quiz-clipper/0.1 (https://github.com/; personal non-commercial)"}
 PRE, POST = 5, 10
+MAX_PLAY = 20  # アプリの最長再生時間（じっくり=20秒）
 
 
 def download(url):
@@ -48,7 +49,7 @@ def main(argv):
             continue
         out = os.path.join(ROOT, a["src"])
         clip_start = max(0.0, float(s["start"]) - PRE)
-        clip_len = float(s.get("duration", 10)) + (s["start"] - clip_start) + POST
+        clip_len = MAX_PLAY + (s["start"] - clip_start) + POST
         if os.path.exists(out) and not force and not only and a.get("clip_start") == clip_start:
             continue
         src = download(a["source_file_url"])

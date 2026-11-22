@@ -11,6 +11,7 @@
 <header class="topbar">
   <button class="linkbtn" data-go="home" aria-label="ホームへ">♪ あの曲なんだっけ？</button>
   <nav>
+    <button class="linkbtn" data-go="songs">曲一覧</button>
     <button class="linkbtn" data-go="stats">成績</button>
     <button class="linkbtn" data-go="credits">クレジット</button>
   </nav>
@@ -32,9 +33,10 @@
       </label>
       <label>難易度（再生時間）
         <select id="set-diff" data-enter-next>
-          <option value="10">かんたん（10秒）</option>
-          <option value="5">ふつう（5秒）</option>
-          <option value="3">むずかしい（3秒）</option>
+          <option value="20">じっくり（20秒）</option>
+          <option value="15" selected>かんたん（15秒）</option>
+          <option value="10">ふつう（10秒）</option>
+          <option value="5">むずかしい（5秒）</option>
         </select>
       </label>
       <label>問題数
@@ -56,8 +58,15 @@
       <p id="pool-info" class="muted small"></p>
     </form>
 
-    <details id="excluded-box" class="card hidden">
+    <details id="excluded-box" class="card">
       <summary>出題から外している曲（<span id="excluded-count">0</span>曲）</summary>
+      <p class="muted small">除外リストは成績とは別に保存されます（「成績をリセット」でも消えません）。
+        ファイルに保存しておけば、別のブラウザや端末で読み込んで同じ除外リストを使えます。</p>
+      <div class="btnrow">
+        <button type="button" id="btn-excl-save" class="secondary small">除外リストをファイルに保存</button>
+        <button type="button" id="btn-excl-load" class="secondary small">ファイルから読み込む</button>
+        <input type="file" id="excl-file" accept=".json,application/json" hidden>
+      </div>
       <ul id="excluded-list" class="excludedlist"></ul>
     </details>
   </section>
@@ -73,6 +82,7 @@
 
     <div class="player card">
       <div class="playrow">
+        <button id="btn-prev" class="prevbtn hidden"><span class="label">◀◀ 前へ</span><kbd>H</kbd></button>
         <button id="btn-play" class="playbtn" aria-label="再生">
           <span class="icon">▶</span><span class="label">タップで再生</span><kbd>J</kbd>
         </button>
@@ -95,7 +105,19 @@
     <div class="btnrow">
       <button class="primary" data-go="home">もう一度</button>
       <button class="secondary" id="btn-review2">間違えた曲を復習</button>
+      <button class="secondary" data-go="songs">全曲の一覧と解説を見る</button>
     </div>
+  </section>
+
+  <!-- 曲一覧（図鑑） -->
+  <section id="screen-songs" class="screen">
+    <h2>曲一覧と解説</h2>
+    <div class="listtools">
+      <input id="songs-q" type="search" placeholder="曲名・作曲者・場面で絞り込み" autocomplete="off">
+      <select id="songs-genre"><option value="">すべてのジャンル</option></select>
+    </div>
+    <p id="songs-info" class="muted small"></p>
+    <div id="songs-body"></div>
   </section>
 
   <!-- 成績 -->

@@ -10,7 +10,7 @@ const SETTINGS_KEY = "mq_settings_v1";
 
 // キーボードショートカット：4択は左手ホームポジション、再生と次へは右手の隣り合ったキー
 const CHOICE_KEYS = ["a", "s", "d", "f"];
-const KEY_PLAY = "j", KEY_NEXT = "k", KEY_EXCLUDE = "l";
+const KEY_PREV = "h", KEY_PLAY = "j", KEY_NEXT = "k", KEY_EXCLUDE = "l";
 const EXCL_KEY = "mq_excluded_v1";
 
 const MODE_PROMPT = {
@@ -63,6 +63,7 @@ function show(id) {
   if (id === "home") refreshHome();
   if (id === "stats") renderStats();
   if (id === "credits") renderCredits();
+  if (id === "songs") renderSongList();
   if (id !== "quiz") stopAudio();
 }
 const songById = id => DB.songs.find(s => s.id === id);
@@ -98,7 +99,8 @@ async function init() {
   const st = loadJSON(SETTINGS_KEY, null);
   if (st) {
     $("#set-mode").value = st.mode || "title";
-    $("#set-diff").value = String(st.diff || 10);
+    $("#set-diff").value = String(st.diff || 15);
+    if (!$("#set-diff").value) $("#set-diff").value = "15"; // 旧設定（3秒など）が残っていた場合
     $("#set-count").value = st.count || 10;
     $("#set-genre").value = st.genre || "";
     $("#set-personal").checked = !!st.personal;
@@ -139,7 +141,7 @@ function wrongIds() {
 function renderExcludedList() {
   const ids = [...getExcluded()].filter(id => songById(id));
   $("#excluded-count").textContent = ids.length;
-  $("#excluded-box").classList.toggle("hidden", ids.length === 0);
+  $("#btn-excl-save").disabled = ids.length === 0;
   $("#excluded-list").innerHTML = ids.map(id => {
     const s = songById(id);
     return `<li><span>${esc(s.title)} <span class="muted small">／${esc(s.composer_short)}</span></span>
@@ -191,23 +193,29 @@ function pickSimilar(answer, candidates, keyFn, n) {
     .map(c => ({ c, k: keyFn(c), sc: similarity(answer, c) + Math.random() * 2.5 }))
     .filter(x => x.k && x.k !== ansKey)
     .sort((x, y) => y.sc - x.sc);
+  // 同じ選択肢になる曲が複数あるときは、再生できる曲を優先して代表にする
+  scored.sort((x, y) => (available.has(y.c.id) - available.has(x.c.id)) * 0.001 + (y.sc - x.sc));
   const out = [], seen = new Set([ansKey]);
   for (const x of scored) {
     if (seen.has(x.k)) continue;
-    seen.add(x.k); out.push(x.k);
+    seen.add(x.k); out.push({ k: x.k, id: x.c.id });
     if (out.length === n) break;
   }
   return out;
 }
+// 選択肢と「その選択肢を代表する曲」の対応（解答後の試聴用）
+function withSongs(answerKey, answerId, wrong) {
+  const optionSongs = { [answerKey]: answerId };
+  wrong.forEach(w => { optionSongs[w.k] = w.id; });
+  return { answer: answerKey, options: shuffle([answerKey, ...wrong.map(w => w.k)]), optionSongs };
+}
 function buildChoices(song, mode, personal) {
   const universe = DB.songs.filter(s => personal || !s.personal_only);
   if (mode === "title") {
-    const wrong = pickSimilar(song, universe, s => s.title, 3);
-    return { answer: song.title, options: shuffle([song.title, ...wrong]) };
+    return withSongs(song.title, song.id, pickSimilar(song, universe, s => s.title, 3));
   }
   if (mode === "composer") {
-    const wrong = pickSimilar(song, universe, s => s.composer_short, 3);
-    return { answer: song.composer_short, options: shuffle([song.composer_short, ...wrong]) };
+    return withSongs(song.composer_short, song.id, pickSimilar(song, universe, s => s.composer_short, 3));
   }
   // scene：その曲が使われる場面は全部正解扱いにならないよう、他曲の場面から重複しないものを選ぶ
   const answer = song.scenes[0];
@@ -215,12 +223,12 @@ function buildChoices(song, mode, personal) {
   const sceneSongs = universe.filter(s => s.scenes && s.scenes.length);
   const scored = sceneSongs
     .filter(s => s.id !== song.id)
-    .flatMap(s => s.scenes.map(sc => ({ sc, w: similarity(song, s) + Math.random() * 3 })))
+    .flatMap(s => s.scenes.map(sc => ({ sc, id: s.id, w: similarity(song, s) + Math.random() * 3 + (available.has(s.id) ? 0.001 : 0) })))
     .filter(x => !own.has(x.sc))
     .sort((a, b) => b.w - a.w);
   const wrong = [];
-  for (const x of scored) { if (!wrong.includes(x.sc)) wrong.push(x.sc); if (wrong.length === 3) break; }
-  return { answer, options: shuffle([answer, ...wrong]) };
+  for (const x of scored) { if (!wrong.some(w => w.k === x.sc)) wrong.push({ k: x.sc, id: x.id }); if (wrong.length === 3) break; }
+  return withSongs(answer, song.id, wrong);
 }
 
 /* ---------- ゲーム進行 ---------- */
@@ -254,40 +262,82 @@ function renderQuestion() {
   $("#q-prompt").textContent = MODE_PROMPT[game.st.mode];
   $("#explain").classList.add("hidden");
   $("#btn-next").classList.add("hidden");
+  $("#btn-prev").classList.toggle("hidden", game.idx === 0);
   $("#play-meter").style.width = "0";
-  setPlayLabel(false, false);
+  setPlayLabel(false, !!q.done);
   const box = $("#choices");
   box.innerHTML = "";
   q.options.forEach((opt, i) => {
+    const row = document.createElement("div");
+    row.className = "choicerow";
     const b = document.createElement("button");
     b.className = "choice";
     b.dataset.opt = opt;
     b.innerHTML = `<kbd>${CHOICE_KEYS[i].toUpperCase()}</kbd>${esc(opt)}`;
-    b.addEventListener("click", () => answer(opt, b));
-    box.appendChild(b);
+    b.addEventListener("click", () => answer(opt));
+    row.appendChild(b);
+    const sid = q.optionSongs?.[opt];
+    if (sid && available.has(sid)) {
+      const p = document.createElement("button");
+      p.className = "optplay hidden";
+      p.dataset.song = sid;
+      p.title = "この選択肢の曲を再生";
+      p.innerHTML = `▶<small>試聴</small>`;
+      p.addEventListener("click", () => playOption(p));
+      row.appendChild(p);
+    }
+    box.appendChild(row);
   });
   prepareAudio(q.song);
+  if (q.done) showAnswered(q);
 }
 
-function answer(opt, btn) {
-  const q = game.questions[game.idx];
-  if (q.done) return;
-  q.done = true;
-  const ok = opt === q.answer;
-  if (ok) game.score++;
+// 解答済みの見た目（正誤の色・解説・試聴ボタン・次へ）
+function showAnswered(q) {
   $$(".choice").forEach(b => {
     b.disabled = true;
     if (b.dataset.opt === q.answer) b.classList.add("correct");
+    else if (b.dataset.opt === q.picked) b.classList.add("wrong");
   });
-  if (!ok) btn.classList.add("wrong");
-  stopAudio();      // 曲を止めて効果音をはっきり聞かせる（「もう一度聴く」で再生できる）
-  playEffect(ok);
-  game.log.push({ id: q.song.id, ok, picked: opt });
-  recordResult(q.song.id, ok);
-  $("#q-score").textContent = `正解 ${game.score}`;
-  renderExplain(q.song, ok);
+  $$(".optplay").forEach(p => p.classList.remove("hidden"));
+  renderExplain(q.song, q.ok);
   $("#btn-next .label").textContent = game.idx + 1 < game.questions.length ? "次へ ▶▶" : "結果を見る";
   $("#btn-next").classList.remove("hidden");
+}
+
+// 解答後、各選択肢の曲を試聴（もう一度押すと停止）
+function playOption(btn) {
+  const wasPlaying = btn.classList.contains("playing");
+  stopAudio();
+  if (wasPlaying) return;
+  const s = songById(btn.dataset.song);
+  if (!s) return;
+  btn.classList.add("playing");
+  playSong(s, clipDuration(s),
+    p => { $("#play-meter").style.width = `${p * 100}%`; },
+    () => btn.classList.remove("playing"));
+}
+
+function prevQuestion() {
+  if (!game || game.idx === 0) return;
+  stopAudio();
+  game.idx--;
+  renderQuestion();
+}
+
+function answer(opt) {
+  const q = game.questions[game.idx];
+  if (q.done) return;
+  q.done = true;
+  q.picked = opt;
+  q.ok = opt === q.answer;
+  if (q.ok) game.score++;
+  stopAudio();      // 曲を止めて効果音をはっきり聞かせる（「もう一度聴く」で再生できる）
+  playEffect(q.ok);
+  game.log.push({ id: q.song.id, ok: q.ok, picked: opt });
+  recordResult(q.song.id, q.ok);
+  $("#q-score").textContent = `正解 ${game.score}`;
+  showAnswered(q);
 }
 
 function renderExplain(s, ok) {
@@ -327,6 +377,8 @@ function nextQuestion() {
   game.idx++;
   if (game.idx >= game.questions.length) return finishGame();
   renderQuestion();
+  // 「次へ」（タップ／Kキー）の操作の続きとして、次の問題の曲をすぐ再生する
+  if (!game.questions[game.idx].done) $("#btn-play").click();
 }
 
 function finishGame() {
@@ -370,31 +422,46 @@ function setPlayLabel(playing, played) {
   $(".icon", b).textContent = playing ? "■" : (played ? "↻" : "▶");
   $(".label", b).textContent = playing ? "再生中…（タップで停止）" : (played ? "もう一度聴く" : "タップで再生");
 }
-function stopAudio() {
+// 音を止めるだけ（ボタン表示は変えない）
+function haltAudio() {
   clearTimeout(stopTimer); cancelAnimationFrame(meterRAF);
   try { audio.pause(); } catch (_) {}
   synthNodes.forEach(n => { try { n.stop(); } catch (_) {} });
   synthNodes = [];
+}
+// 音を止めて、再生ボタン類の表示も元に戻す
+function stopAudio() {
+  haltAudio();
+  $$(".optplay.playing").forEach(p => p.classList.remove("playing"));
   if (game) setPlayLabel(false, true);
 }
 function clipDuration(song) {
-  const diff = game ? game.st.diff : 10;
-  return diff >= 10 ? (song.duration || 10) : diff;
+  if ($("#screen-songs").classList.contains("active")) return 15;
+  return (game && game.st.diff) || 15;
 }
 // song を start から dur 秒再生。onTick(0..1) で進捗
 async function playSong(song, dur, onTick, onEnd, startOverride) {
-  stopAudio();
+  haltAudio();
   if (song.audio?.type === "synth") return playSynth(song, dur, onTick, onEnd);
   const start = startOverride ?? startOf(song);
   const offset = Math.max(0, start - (song.audio.clip_start || 0));
+  // 元音源が短い曲は、クリップの終わりで止める（無音のままメーターが進まないように）
+  if (song.audio.clip_length) dur = Math.max(1, Math.min(dur, song.audio.clip_length - offset));
   if (!audio.src.endsWith(song.audio.src.replace(/^\.?\//, ""))) { audio.src = song.audio.src; }
   try {
-    if (audio.readyState < 1) await new Promise((res, rej) => {
-      audio.addEventListener("loadedmetadata", res, { once: true });
-      audio.addEventListener("error", rej, { once: true });
-      audio.load();
-    });
+    if (audio.readyState < 1) {
+      // 読み込み待ちの間にスマホが「ユーザー操作による再生」と見なさなくなるのを防ぐため、
+      // 消音で先に再生を始めておき、位置を合わせてから音を出す
+      audio.muted = true;
+      audio.play().catch(() => {});
+      await new Promise((res, rej) => {
+        if (audio.readyState >= 1) return res();
+        audio.addEventListener("loadedmetadata", res, { once: true });
+        audio.addEventListener("error", rej, { once: true });
+      });
+    }
     audio.currentTime = offset;
+    audio.muted = false;
     audio.volume = 1;
     await audio.play();
   } catch (e) {
@@ -503,6 +570,7 @@ $("#btn-play").addEventListener("click", () => {
   if (!q) return;
   if ($("#btn-play").classList.contains("playing")) { stopAudio(); return; }
   $("#play-note").textContent = "　";
+  stopAudio();
   setPlayLabel(true, true);
   playSong(q.song, clipDuration(q.song),
     p => { $("#play-meter").style.width = `${p * 100}%`; },
@@ -536,6 +604,55 @@ $("#btn-reset-stats").addEventListener("click", () => {
   try { localStorage.removeItem(STORE_KEY); } catch (_) {}
   renderStats();
 });
+
+/* ---------- 曲一覧（全曲の解説） ---------- */
+const GENRE_ORDER = ["管弦楽", "行進曲", "オペラ・バレエ", "ピアノ", "ピアノ・オルガン", "室内楽", "声楽・合唱", "民謡", "鐘・チャイム"];
+function renderSongList() {
+  const gsel = $("#songs-genre");
+  if (gsel.options.length === 1) {
+    [...new Set(DB.songs.map(s => s.genre))].sort((a, b) => GENRE_ORDER.indexOf(a) - GENRE_ORDER.indexOf(b))
+      .forEach(g => gsel.insertAdjacentHTML("beforeend", `<option value="${esc(g)}">${esc(g)}</option>`));
+  }
+  const qtext = $("#songs-q").value.trim().toLowerCase();
+  const genre = gsel.value;
+  const ex = getExcluded(), per = getStats().perSong;
+  const list = DB.songs
+    .filter(s => !genre || s.genre === genre)
+    .filter(s => !qtext || [s.title, s.title_full, s.composer, s.composer_short, ...(s.scenes || []), ...(s.tags || [])]
+      .join(" ").toLowerCase().includes(qtext))
+    .sort((a, b) => (GENRE_ORDER.indexOf(a.genre) - GENRE_ORDER.indexOf(b.genre)) || a.title.localeCompare(b.title, "ja"));
+  $("#songs-info").textContent = `${list.length}曲（全${DB.songs.length}曲）。▶で有名な部分を15秒再生します。`;
+  let html = "", cur = null;
+  for (const s of list) {
+    if (s.genre !== cur) { cur = s.genre; html += `<h3 class="songgroup">${esc(cur)}</h3>`; }
+    const p = per[s.id];
+    const badges = [
+      ex.has(s.id) ? '<span class="badge">出題から除外中</span>' : "",
+      s.personal_only ? '<span class="badge">個人用</span>' : "",
+      !available.has(s.id) ? '<span class="badge">音源未配置</span>' : "",
+    ].join("");
+    html += `<div class="songcard">
+      <div class="head">
+        <div>
+          <h3>${esc(s.title)}${badges}</h3>
+          <div class="meta">${esc(s.title_full || "")}</div>
+          <div class="meta">${esc(s.composer)}／${esc(s.year || "作曲年不明")}／${esc(s.era || "")}</div>
+        </div>
+        ${available.has(s.id) ? `<button class="optplay" data-song="${esc(s.id)}" title="再生">▶<small>15秒</small></button>` : ""}
+      </div>
+      ${(s.scenes || []).length ? `<p>${s.scenes.map(x => `<span class="tag">${esc(x)}</span>`).join("")}</p>` : ""}
+      ${s.trivia ? `<p>${esc(s.trivia)}</p>` : ""}
+      ${p ? `<p class="meta">あなたの成績：◯${p.right} ✕${p.wrong}</p>` : ""}
+    </div>`;
+  }
+  $("#songs-body").innerHTML = html || '<p class="muted">該当する曲がありません</p>';
+}
+$("#songs-body").addEventListener("click", e => {
+  const b = e.target.closest(".optplay");
+  if (b) playOption(b);
+});
+$("#songs-q").addEventListener("input", () => { stopAudio(); renderSongList(); });
+$("#songs-genre").addEventListener("change", () => { stopAudio(); renderSongList(); });
 
 /* ---------- クレジット＆開始位置チューナー ---------- */
 function renderCredits() {
@@ -610,6 +727,7 @@ $("#settings").addEventListener("change", refreshHome);
 $("#btn-review").addEventListener("click", () => startGame(true));
 $("#btn-review2").addEventListener("click", () => startGame(true));
 $("#btn-next").addEventListener("click", nextQuestion);
+$("#btn-prev").addEventListener("click", prevQuestion);
 document.addEventListener("keydown", e => {
   if (!$("#screen-quiz").classList.contains("active") || e.target.matches?.("input,select,textarea")) return;
   if (e.ctrlKey || e.metaKey || e.altKey || e.isComposing) return;
@@ -617,9 +735,44 @@ document.addEventListener("keydown", e => {
   const ci = CHOICE_KEYS.indexOf(k) >= 0 ? CHOICE_KEYS.indexOf(k) : (/^[1-4]$/.test(k) ? Number(k) - 1 : -1);
   const nextVisible = !$("#btn-next").classList.contains("hidden");
   if (k === KEY_PLAY || k === " ") { e.preventDefault(); $("#btn-play").click(); }
-  else if (ci >= 0) { const b = $$(".choice")[ci]; b && !b.disabled && b.click(); }
+  else if (ci >= 0) {
+    const b = $$(".choice")[ci];
+    if (b && !b.disabled) b.click();
+    else if (b) { const p = $(".optplay", b.parentElement); p && p.click(); } // 解答後は試聴
+  }
+  else if (k === KEY_PREV) { e.preventDefault(); prevQuestion(); }
   else if ((k === KEY_NEXT || k === "enter") && nextVisible) { e.preventDefault(); nextQuestion(); }
   else if (k === KEY_EXCLUDE && nextVisible) { e.preventDefault(); toggleExclude(); }
+});
+// 除外リストをファイルに保存／ファイルから読み込み（成績とは独立）
+$("#btn-excl-save").addEventListener("click", () => {
+  const ids = [...getExcluded()].filter(id => songById(id));
+  const data = { type: "melody-quiz-excluded", version: 1, saved_at: new Date().toISOString(),
+    songs: ids.map(id => ({ id, title: songById(id).title })) };
+  const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }));
+  const a = document.createElement("a");
+  a.href = url; a.download = "melody-quiz-除外リスト.json";
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+});
+$("#btn-excl-load").addEventListener("click", () => $("#excl-file").click());
+$("#excl-file").addEventListener("change", async e => {
+  const f = e.target.files[0];
+  e.target.value = "";
+  if (!f) return;
+  try {
+    const data = JSON.parse(await f.text());
+    const ids = (Array.isArray(data) ? data : data.songs || []).map(x => typeof x === "string" ? x : x.id).filter(id => songById(id));
+    if (!ids.length) { alert("このファイルには読み込める曲がありませんでした"); return; }
+    const ex = getExcluded();
+    const before = ex.size;
+    ids.forEach(id => ex.add(id));
+    saveJSON(EXCL_KEY, [...ex]);
+    refreshHome();
+    alert(`${ex.size - before}曲を除外リストに追加しました（合計 ${ex.size}曲）`);
+  } catch (err) {
+    alert("ファイルを読み込めませんでした（除外リストのJSONファイルを選んでください）");
+  }
 });
 $("#excluded-list").addEventListener("click", e => {
   const id = e.target.closest("[data-restore]")?.dataset.restore;

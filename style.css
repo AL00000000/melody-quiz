@@ -100,3 +100,27 @@ kbd{display:inline-block;min-width:1.6em;padding:0 .35em;border-radius:6px;font:
 #excluded-box summary{cursor:pointer;font-weight:700}
 .excludedlist{list-style:none;padding:0;margin:8px 0 0}
 .excludedlist li{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--line)}
+
+/* 前へボタン */
+.prevbtn{flex:0 0 auto;padding:18px 16px;border-radius:999px;border:2px solid var(--line);background:var(--card);
+  color:var(--fg);font-size:1rem;font-weight:700;cursor:pointer;touch-action:manipulation;white-space:nowrap}
+.prevbtn kbd{background:var(--bg);border-color:var(--line)}
+@media (max-width:480px){ .prevbtn{padding:14px 10px;font-size:.9rem} .prevbtn .label{font-size:.85rem} }
+/* 4択の行（選択肢＋解答後の試聴ボタン） */
+.choicerow{display:flex;gap:6px;align-items:stretch}
+.choicerow .choice{flex:1 1 auto;min-width:0}
+.optplay{flex:0 0 auto;width:56px;border-radius:12px;border:2px solid var(--line);background:var(--card);color:var(--accent);
+  font-size:1.1rem;font-weight:800;cursor:pointer;touch-action:manipulation}
+.optplay.playing{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
+.optplay small{display:block;font-size:.65rem;font-weight:600;color:inherit;opacity:.8}
+/* 曲一覧 */
+.listtools{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+.listtools input,.listtools select{flex:1 1 200px;padding:10px;border-radius:10px;border:1px solid var(--line);background:var(--card);font-size:16px}
+.songcard{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px;margin:10px 0}
+.songcard .head{display:flex;gap:10px;align-items:flex-start}
+.songcard .head > div{flex:1 1 auto;min-width:0}
+.songcard h3{margin:0;font-size:1.05rem}
+.songcard p{margin:6px 0 0}
+.songcard .meta{font-size:.85rem;color:var(--muted)}
+.songcard .optplay{width:64px;min-height:48px}
+.songgroup{margin-top:18px;font-size:.95rem;color:var(--muted);border-bottom:2px solid var(--line);padding-bottom:4px}
